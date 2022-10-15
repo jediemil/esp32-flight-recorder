@@ -128,6 +128,9 @@ void setupSD() {
 void setup(void) {
     Serial.begin(115200);
 
+    pinMode(15, OUTPUT);
+    digitalWrite(15, LOW);
+
     setupSD();
 
     IPAddress localIP(192,168,1,2);
@@ -152,6 +155,12 @@ void setup(void) {
     setupMPU();
 
     delay(3000);
+
+    digitalWrite(15, HIGH);
+    delay(5000);
+    digitalWrite(15, LOW);
+
+    Serial.println("Started");
 }
 
 void loop() {
@@ -189,36 +198,32 @@ void loop() {
     }
 
     int i = 0;
+
+    /*unsigned long totX = 0;
+    unsigned long totY = 0;
+    unsigned long totZ = 0;
+    unsigned long totRX = 0;
+    unsigned long totRY = 0;
+    unsigned long totRZ = 0;*/
+
     unsigned long microsStart = micros();
-    while (i < 10000) {
+    int timeWithNoMovement = 0;
+    unsigned long millisStart = millis();
+    bool logRunning = true;
+    while (i < 260 * 10 * 60 && logRunning) {
         i++;
-        /* Get new sensor events with the readings */
         sensors_event_t a, g, temp;
         mpu.getEvent(&a, &g, &temp);
 
-        /* Print out the values */
-        /*Serial.print("Acceleration X: ");
-        Serial.print(a.acceleration.x);
-        Serial.print(", Y: ");
-        Serial.print(a.acceleration.y);
-        Serial.print(", Z: ");
-        Serial.print(a.acceleration.z);
-        Serial.println(" m/s^2");
+        /*totX += abs(a.acceleration.x);
+        totY += abs(a.acceleration.y);
+        totZ += abs(a.acceleration.z);
 
-        Serial.print("Rotation X: ");
-        Serial.print(g.gyro.x * 2 * 3.1415);
-        Serial.print(", Y: ");
-        Serial.print(g.gyro.y * 2 * 3.1415);
-        Serial.print(", Z: ");
-        Serial.print(g.gyro.z * 2 * 3.1415);
-        Serial.println(" deg/s");
+        totRX += abs(g.gyro.x);
+        totRY += abs(g.gyro.y);
+        totRZ += abs(g.gyro.z);*/
 
-        Serial.print("Temperature: ");
-        Serial.print(temp.temperature);
-        Serial.println(" degC");
 
-        Serial.println("");
-        delay(100);*/
         file.print(micros() - microsStart);
         file.print(", ");
         file.print(a.acceleration.x);
@@ -235,9 +240,39 @@ void loop() {
         file.print(", ");
         file.println(temp.temperature);
 
-        delay(1000 / 260);
+        if (i%20 == 0) {
+            Serial.println(timeWithNoMovement);
+            Serial.println(i);
+            Serial.println(pow(a.acceleration.x, 2) + pow(a.acceleration.y, 2) + pow(a.acceleration.z, 2));
+        }
+
+        if (i >= 260 * 60) {
+            if (pow(a.acceleration.x, 2) + pow(a.acceleration.y, 2) + pow(a.acceleration.z, 2) <= pow(12, 2) &&
+            pow(g.gyro.x, 2) + pow(g.gyro.y, 2) + pow(g.gyro.z, 2) <= 1) {
+                timeWithNoMovement++;
+                if (timeWithNoMovement >= 260 * 60) {
+                    logRunning = false;
+                }
+            } else {
+                timeWithNoMovement -= 10;
+                timeWithNoMovement = max(timeWithNoMovement, 0);
+            }
+        }
+
+        unsigned long nextUs = microsStart + (i+1)*1000.0/260.0 * 1000.0;
+        unsigned long delay = nextUs-micros();
+        if (delay <= 1000*1000/260) {
+            delay = 0;
+        }
+        //Serial.printf("Delaying %lu ms, millis = %lu, start = %lu, next = %lu\n", nextUs-micros(), micros(), microsStart, nextUs);
+        //delayMicroseconds(delay);
+        //delay(1000 / 260);
     }
+    unsigned long millisEnd = millis();
 
     file.close();
     Serial.println("Log done");
+    Serial.printf("Logged for %lu seconds\n", (millisEnd-millisStart)/1000);
+
+    digitalWrite(15, HIGH);
 }
